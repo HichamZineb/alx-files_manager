@@ -1,44 +1,28 @@
 import express from 'express';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import { MongoClient } from 'mongodb';
-import redis from 'redis';
-import routes from './routes/index.js';
+import router from './routes/index';
+import unmatchedRouteHandler from './middleware/unmatched';
+import errorHandler from './middleware/error';
+import shutdown from './utils/shutdown';
 
-dotenv.config();
-
+// Express server
 const app = express();
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(router);
+app.use(unmatchedRouteHandler);
+app.use(errorHandler);
 
-// Database Connection
-const mongoClient = new MongoClient(process.env.DB_HOST || 'localhost', {
-  useUnifiedTopology: true,
-  useNewUrlParser: true,
+const server = app.listen(PORT, () => {
+  // eslint-disable-next-line no-console
+  console.log(`Server running on port ${PORT}`);
 });
 
-mongoClient.connect((err) => {
-  if (err) {
-    console.error('MongoDB connection failed:', err);
-  } else {
-    console.log('Connected to MongoDB');
-  }
-});
+// Graceful shutdown
+const handler = () => shutdown(server);
+process.on('SIGINT', handler);
+process.on('SIGTERM', handler);
+process.on('SIGQUIT', handler);
 
-const redisClient = redis.createClient(process.env.REDIS_PORT || 6379);
-
-redisClient.on('error', (err) => {
-  console.error('Redis connection failed:', err);
-});
-
-// Routes
-app.use('/', routes);
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
-
-export { mongoClient, redisClient };
+export default app;
